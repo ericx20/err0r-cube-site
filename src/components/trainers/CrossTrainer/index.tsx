@@ -3,9 +3,13 @@ import { useEffect, useState } from "react";
 import {
   Box,
   Button,
+  ButtonProps,
   Card,
+  Checkbox,
   Container,
   Flex,
+  FormControl,
+  FormLabel,
   Heading,
   HStack,
   Modal,
@@ -40,31 +44,34 @@ import useScrambleAndSolutions from "../common/useScrambleAndSolutions";
 import ScrambleEditor from "../common/ScrambleEditor";
 import { Cube3x3 } from "src/lib/puzzles/cube3x3";
 
-import { useCrossOptions, useActions, useUIOptions } from "./store";
+import { Options, useOptions, useStore } from "./store";
 
 import scrambler from "./scrambler";
 import solver from "./solver";
 
 import SolutionsViewer, { DisplayedSolution } from "../common/SolutionsViewer";
-import CrossLevelSelect from "./cards/CrossLevelSelect";
-import PreferenceSelect from "./cards/PreferenceSelect";
 import { useHotkeys } from "react-hotkeys-hook";
-import KeyboardControls from "./cards/KeyboardControls";
+import KeyboardControls from "./settings/KeyboardControls";
 import { plausible } from "src/App";
-import { CrossSolution, CrossStep } from "./types";
+import {
+  ColorNeutrality,
+  CrossColor,
+  CrossSolution,
+  CrossStep,
+  DualCrossColors,
+  LevelMode,
+} from "./types";
 import { NUM_OF_MOVES_CONFIGS } from "./constants";
-import ScrambleSettings from "./cards/ScrambleSettings";
+import ScrambleSettings from "./settings/ScrambleSettings";
+import { SelectNumOfMoves } from "../common/SelectNumOfMoves";
 
 export default function CrossTrainer() {
   const [areSolutionsHidden, setSolutionsHidden] = useState(true);
   const hideSolutions = () => setSolutionsHidden(true);
   const showSolutions = () => setSolutionsHidden(false);
 
-  // if any of the options change, this component will re-render
-  // that's what we want for now, but if not then make selectors for the parts of the state we care about
-  const crossOptions = useCrossOptions();
-  const uiOptions = useUIOptions();
-  const actions = useActions();
+  const state = useStore();
+  const options = useOptions();
 
   const {
     scramble,
@@ -73,7 +80,7 @@ export default function CrossTrainer() {
     solutions,
     isLoading,
     getNext,
-  } = useScrambleAndSolutions(scrambler, solver, crossOptions, hideSolutions);
+  } = useScrambleAndSolutions(scrambler, solver, options, hideSolutions);
 
   const mainAction = areSolutionsHidden
     ? showSolutions
@@ -89,7 +96,7 @@ export default function CrossTrainer() {
   const displayedSolutions: DisplayedSolution<Move3x3, RotationMove>[] =
     solutions.map(({ preRotation, solution, xcrossSlot }) => ({
       preRotation,
-      solution: uiOptions.chooseExecutionAngle
+      solution: state.chooseExecAngle
         ? optimizeSolutionByYRotation(solution)
         : solution,
       label: xcrossSlot,
@@ -97,17 +104,17 @@ export default function CrossTrainer() {
 
   // hotkeys (note, more hotkeys are implemented in children)
   useHotkeys(" ", mainAction, [areSolutionsHidden], {
-    enabled: uiOptions.enableHotkeys && !isLoading,
+    enabled: state.enableHotkeys && !isLoading,
     preventDefault: true,
   });
-  useHotkeys("Backspace", hideSolutions, { enabled: uiOptions.enableHotkeys });
+  useHotkeys("Backspace", hideSolutions, { enabled: state.enableHotkeys });
 
   const { min: minNumOfMoves, max: maxNumOfMoves } =
-    NUM_OF_MOVES_CONFIGS[crossOptions.crossStep];
-
+    NUM_OF_MOVES_CONFIGS[state.crossStep];
   return (
     <Container maxW="container.lg">
       <VStack spacing={4} my={4}>
+        <Heading size="md">cross trainer</Heading> 
         <Card p="1.5rem" w="100%">
           <ScrambleEditor
             scrambleFailed={scrambleFailed}
@@ -119,54 +126,42 @@ export default function CrossTrainer() {
         </Card>
         <Card p="1.5rem" w="100%">
           <SolutionsViewer
-            mask={MASKS[crossOptions.crossStep]}
+            mask={MASKS[state.crossStep]}
             scramble={scramble}
             solutions={displayedSolutions}
             isLoading={isLoading}
             hideSolutions={areSolutionsHidden || isLoading}
             onRevealSolutions={showSolutions}
-            enableHotkeys={!areSolutionsHidden && uiOptions.enableHotkeys}
+            enableHotkeys={!areSolutionsHidden && state.enableHotkeys}
             movecountMetric={MOVECOUNT_METRICS.HTM}
           >
             <HStack>
-              {!areSolutionsHidden && !isLoading && (
-                <ShareButton text={copyText} />
-              )}
-              <Button onClick={mainAction} isLoading={isLoading} w="100%">
+              <ShareButton text={copyText} isDisabled={areSolutionsHidden || isLoading} />
+              <Button onClick={mainAction} isLoading={isLoading} w="100%" colorScheme="purple">
                 {areSolutionsHidden ? "reveal" : "next"}
               </Button>
-              {!areSolutionsHidden && !isLoading && (
-                <Button onClick={hideSolutions}>hide</Button>
-              )}
+              <Button onClick={hideSolutions} isDisabled={areSolutionsHidden || isLoading}>hide</Button>
             </HStack>
           </SolutionsViewer>
         </Card>
+        <Card p="1.5rem" w="100%">
+          <ScrambleSettings
+              crossStep={state.crossStep}
+              colorNeutrality={state.colorNeutrality}
+              fixedCrossColor={state.fixedCrossColor}
+              dualCrossColors={state.dualCrossColors}
+              levelMode={state.levelMode}
+              numOfMoves={state.numOfMoves}
+              setCrossStep={state.setCrossStep}
+              setColorNeutrality={state.setColorNeutrality}
+              setFixedCrossColor={state.setFixedCrossColor}
+              setDualCrossColors={state.setDualCrossColors}
+              setLevelMode={state.setLevelMode}
+              setNumOfMoves={state.setNumOfMoves}
+          />
+        </Card>
+        {/* TODO: keyboard shortcut settings */}
         <Flex direction="column" w="100%" gap={4}>
-          <Card p="1.5rem">
-            <CrossLevelSelect
-              levelMode={crossOptions.levelMode}
-              setLevelMode={actions.setLevelMode}
-              numOfMoves={crossOptions.numOfMoves}
-              setNumOfMoves={actions.setLevelNumOfMoves}
-              minNumOfMoves={minNumOfMoves}
-              maxNumOfMoves={maxNumOfMoves}
-            />
-          </Card>
-          <Card p="1.5rem">
-            <ScrambleSettings
-              crossStep={crossOptions.crossStep}
-              setCrossStep={actions.setCrossStep}
-              colorNeutrality={crossOptions.colorNeutrality}
-              setColorNeutrality={actions.setColorNeutrality}
-              solutionOrientations={crossOptions.solutionOrientations}
-              setSolutionOrientations={actions.setSolutionOrientations}
-              // TODO:
-              // shortScrambles={crossOptions.shortScrambles}
-              // setShortScrambles={actions.setShortScrambles}
-              // chooseExecutionAngle={uiOptions.chooseExecutionAngle}
-              // setChooseExecutionAngle={actions.setChooseExecutionAngle}
-            />
-          </Card>
           <Stack
             direction={{ base: "column", md: "row" }}
             spacing={4}
@@ -175,8 +170,8 @@ export default function CrossTrainer() {
           >
             <Card p="1.5rem" flex={1} display={{ base: "none", sm: "flex" }}>
               <KeyboardControls
-                enableHotkeys={uiOptions.enableHotkeys}
-                setEnableHotkeys={actions.setEnableHotkeys}
+                enableHotkeys={state.enableHotkeys}
+                setEnableHotkeys={state.setEnableHotkeys}
               />
             </Card>
           </Stack>
@@ -192,7 +187,7 @@ const scrambleParser = (input: string) => {
 };
 
 // TODO: make this common
-function ShareButton({ text }: { text: string }) {
+function ShareButton({ text, isDisabled }: { text: string, isDisabled?: boolean }) {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { onCopy, hasCopied, setValue } = useClipboard(text);
   useEffect(() => {
@@ -201,7 +196,7 @@ function ShareButton({ text }: { text: string }) {
   const boxColor = useColorModeValue("gray.100", "gray.600");
   return (
     <>
-      <Button onClick={onOpen}>share</Button>
+      <Button onClick={onOpen} isDisabled={isDisabled}>share</Button>
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
         <ModalContent>
@@ -233,7 +228,7 @@ function ShareButton({ text }: { text: string }) {
   );
 }
 
-// TODO: update
+// TODO: generalize this to accept DisplayedSolution<MoveType, RotationType>[] and move to common.
 function generateCopyText(
   scramble: Move3x3[],
   solutions: CrossSolution[]

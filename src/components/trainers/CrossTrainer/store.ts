@@ -1,123 +1,160 @@
 import { create } from "zustand";
-import { immer } from "zustand/middleware/immer";
 import { persist } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 import { mergeDeepLeft } from "ramda";
 
-import type { ColorNeutrality, CrossStep, LevelMode } from "./types";
-import type { CubeOrientation } from "src/lib/puzzles/cube3x3";
+import type {
+  ColorNeutrality,
+  CrossColor,
+  CrossStep,
+  DualCrossColors,
+  LevelMode,
+  XCrossSlot,
+} from "./types";
 import { NUM_OF_MOVES_CONFIGS } from "./constants";
 
-// When these options change, scrambles and solutions are regenerated
-export interface CrossOptions {
+type State = {
   crossStep: CrossStep;
+  colorNeutrality: ColorNeutrality;
+  fixedCrossColor: CrossColor;
+  dualCrossColors: DualCrossColors;
+  fixedXCrossSlot: XCrossSlot;
   levelMode: LevelMode;
   numOfMoves: number;
-  // This option is only shown on the UI, the solver will use crossOptions.solutionOrientations for solving color neutrality
-  colorNeutrality: ColorNeutrality;
-  solutionOrientations: CubeOrientation[];
   shortScrambles: boolean;
-}
-
-// These options control UI display settings, not the scramble and solver
-export interface UIOptions {
   enableHotkeys: boolean;
-  chooseExecutionAngle: boolean;
-}
+  chooseExecAngle: boolean;
+};
 
-export interface Actions {
-  setCrossStep: (crossStep: CrossStep) => void;
-  setLevelMode: (mode: LevelMode) => void;
-  setLevelNumOfMoves: (num: number) => void;
-  setColorNeutrality: (colorNeutrality: ColorNeutrality) => void;
-  setSolutionOrientations: (orientations: CubeOrientation[]) => void;
-  setShortScrambles: (shortScrambles: boolean) => void;
+type Action = {
+  setCrossStep: (value: CrossStep) => void;
+  setColorNeutrality: (value: ColorNeutrality) => void;
+  setFixedCrossColor: (value: CrossColor) => void;
+  setDualCrossColors: (value: DualCrossColors) => void;
+  setFixedXCrossSlot: (value: XCrossSlot) => void;
+  setLevelMode: (value: LevelMode) => void;
+  setNumOfMoves: (value: number) => void;
+  setShortScrambles: (value: boolean) => void;
+  setEnableHotkeys: (value: boolean) => void;
+  setChooseExecAngle: (value: boolean) => void;
+};
 
-  setChooseExecutionAngle: (chooseExecutionAngle: boolean) => void;
-  setEnableHotkeys: (enable: boolean) => void;
-}
+/*
+CONSTRAINTS:
+- crossStep == Cross:
+  - colorNeutrality == fixed:
+    - levelMode: random | num-of-moves
+    - shortScrambles: true | false
+  - colorNeutrality == dual or full:
+    - levelMode: random ONLY
+    - shortScrambles: false ONLY
 
-interface State {
-  crossOptions: CrossOptions;
-  uiOptions: UIOptions;
-  actions: Actions;
-}
+- crossStep == XCross:
+  - colorNeutrality == fixed:
+    - levelMode == random:
+      - shortScrambles: false ONLY
+    - levelMode == num-of-moves:
+      - shortScrambles: true | false
+  - colorNeutrality == dual:
+    - levelMode: random ONLY
+    - shortScrambles: false ONLY
 
-const useStore = create(
-  persist(
-    immer<State>((set, _get) => ({
-      crossOptions: {
-        levelMode: "random",
-        numOfMoves: 3,
-        colorNeutrality: "fixed",
-        solutionOrientations: ["YB"],
-        shortScrambles: true,
-        crossStep: "Cross",
-      },
-      uiOptions: {
-        chooseExecutionAngle: true,
-        enableHotkeys: true,
-      },
-      actions: {
-        setCrossStep: (crossStep) =>
-          set((state) => {
-            const { min, max } = NUM_OF_MOVES_CONFIGS[crossStep];
-            if (state.crossOptions.numOfMoves < min) {
-              state.crossOptions.numOfMoves = min;
-            } else if (state.crossOptions.numOfMoves > max) {
-              state.crossOptions.numOfMoves = max;
-            }
-            state.crossOptions.crossStep = crossStep;
-          }),
-        setLevelMode: (levelMode) =>
-          set((state) => {
-            state.crossOptions.levelMode = levelMode;
-          }),
-        setLevelNumOfMoves: (numOfMoves) =>
-          set((state) => {
-            state.crossOptions.numOfMoves = numOfMoves;
-          }),
-        setColorNeutrality: (colorNeutrality) =>
-          set((state) => {
-            state.crossOptions.colorNeutrality = colorNeutrality;
-          }),
-        setSolutionOrientations: (orientations) =>
-          set((state) => {
-            state.crossOptions.solutionOrientations = orientations;
-          }),
-        setShortScrambles: (shortScrambles) =>
-          set((state) => {
-            state.crossOptions.shortScrambles = shortScrambles;
-          }),
+summary:
+- if colorNeutrality != fixed || (crossStep == XCross && levelMode == num-of-moves)
+  then shortScrambles must be false
+- if (colorNeutrality != fixed) then levelMode must be random
+*/
 
-        setChooseExecutionAngle: (chooseExecutionAngle) =>
-          set((state) => {
-            state.uiOptions.chooseExecutionAngle = chooseExecutionAngle;
-          }),
-        setEnableHotkeys: (enable) =>
-          set((state) => {
-            state.uiOptions.enableHotkeys = enable;
-          }),
-      },
-    })),
+/**
+ * Manages the settings shown on the UI
+ */
+export const useStore = create(
+  persist<State & Action>(
+    (set, get) => ({
+      crossStep: "Cross",
+      colorNeutrality: "fixed",
+      fixedCrossColor: "white",
+      dualCrossColors: "white/yellow",
+      fixedXCrossSlot: "BL",
+      levelMode: "random",
+      numOfMoves: 3,
+      shortScrambles: true,
+      enableHotkeys: true,
+      chooseExecAngle: true,
+      setCrossStep: (crossStep) =>
+        set(() => {
+          const { min, max } = NUM_OF_MOVES_CONFIGS[crossStep];
+          const state = get();
+          const numOfMoves =
+            state.numOfMoves < min
+              ? min
+              : state.numOfMoves > max
+              ? max
+              : state.numOfMoves;
+          const colorNeutrality =
+            crossStep === "XCross" && state.colorNeutrality === "full"
+              ? "dual"
+              : state.colorNeutrality;
+          return {
+            crossStep,
+            numOfMoves,
+            colorNeutrality,
+          };
+        }),
+      setColorNeutrality: (colorNeutrality) => set(() => ({ colorNeutrality })),
+      setFixedCrossColor: (fixedCrossColor) => set(() => ({ fixedCrossColor })),
+      setDualCrossColors: (dualCrossColors) => set(() => ({ dualCrossColors })),
+      setFixedXCrossSlot: (fixedXCrossSlot) => set(() => ({ fixedXCrossSlot })),
+      setLevelMode: (levelMode) => set(() => ({ levelMode })),
+      setNumOfMoves: (numOfMoves) => set(() => ({ numOfMoves })),
+      setShortScrambles: (shortScrambles) => set(() => ({ shortScrambles })),
+      setEnableHotkeys: (enableHotkeys) => set(() => ({ enableHotkeys })),
+      setChooseExecAngle: (chooseExecAngle) => set(() => ({ chooseExecAngle })),
+    }),
     {
       name: "cross",
-      version: 0.2,
+      version: 1,
       merge: (persistedState, currentState) =>
         mergeDeepLeft(persistedState ?? {}, currentState),
-      migrate: (persistedState, version) => {
-        if (version === 0.1) {
-          // We changed solutionOrientation from a CubeOrientation to a list of CubeOrientation
-          (persistedState as any).crossOptions.solutionOrientations = [
-            (persistedState as any).crossOptions.solutionOrientation,
-          ];
-          delete (persistedState as any).crossOptions.solutionOrientation;
-        }
-        return persistedState as State;
-      },
     }
   )
 );
 
-export const useCrossOptions = () => useStore((state) => state.crossOptions);
-export const useUIOptions = () => useStore((state) => state.uiOptions);
-export const useActions = () => useStore((state) => state.actions);
+export type Options = {
+  crossStep: CrossStep;
+  colorNeutrality: ColorNeutrality;
+  fixedCrossColor: CrossColor;
+  fixedXCrossSlot: XCrossSlot;
+  dualCrossColors: DualCrossColors;
+  levelMode: LevelMode;
+  numOfMoves: number;
+  shortScrambles: boolean;
+};
+
+/**
+ * Converts the settings chosen in the UI into settings for the scrambler and solver.
+ * This is a separate selector to prevent unnecessary re-renders when other unrelated settings change.
+ * The settings have some rules, e.g. when color neutrality is not fixed, "num-of-moves" is not allowed.
+ * We apply the rules by ignoring the original settings from state, rather than enforcing the rules in the state itself.
+ * This is more convenient for users, their preferences will be remembered and ignored only when they don't apply.
+ * TODO: is this unnecessary? what if we let the scramblers and solvers decide which options to ignore?
+ */
+export const useOptions = () =>
+  useStore<Options>(
+    useShallow((state) => {
+      const disableShortScrambles =
+        state.colorNeutrality !== "fixed" ||
+        (state.crossStep == "XCross" && state.levelMode === "num-of-moves");
+      return {
+        crossStep: state.crossStep,
+        colorNeutrality: state.colorNeutrality,
+        fixedCrossColor: state.fixedCrossColor,
+        fixedXCrossSlot: state.fixedXCrossSlot,
+        dualCrossColors: state.dualCrossColors,
+        levelMode:
+          state.colorNeutrality === "fixed" ? state.levelMode : "random",
+        numOfMoves: state.numOfMoves,
+        shortScrambles: disableShortScrambles ? false : state.shortScrambles,
+      };
+    })
+  );

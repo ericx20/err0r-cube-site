@@ -1,8 +1,6 @@
 import { Select } from "@chakra-ui/react";
 import { getAdjacentColors } from "src/lib/puzzles/cube3x3";
 import { Color, CubeOrientation } from "src/lib/puzzles/cube3x3";
-import { COLOR_NAMES } from "./constants";
-import { COLORS } from "src/lib/puzzles/cube3x3";
 
 export interface OrientationSelectProps {
   orientation: CubeOrientation;
@@ -36,6 +34,7 @@ export default function OrientationSelect({
     setOrientation(newOrientation);
   };
 
+  /* prettier-ignore */
   return (
     <>
       <Select
@@ -44,11 +43,12 @@ export default function OrientationSelect({
         variant="filled"
         maxWidth="12rem"
       >
-        {COLORS.map((color) => (
-          <option value={color} key={color}>
-            {COLOR_NAMES[color]} top
-          </option>
-        ))}
+        <option value="W" key="W">white top</option>
+        <option value="O" key="O">orange top</option>
+        <option value="G" key="G">green top</option>
+        <option value="R" key="R">red top</option>
+        <option value="B" key="B">blue top</option>
+        <option value="Y" key="Y">yellow top</option>
       </Select>
       <Select
         value={frontColor}
@@ -56,11 +56,12 @@ export default function OrientationSelect({
         variant="filled"
         maxWidth="12rem"
       >
-        {COLORS.map((color) => (
-          <option value={color} key={color}>
-            {COLOR_NAMES[color]} front
-          </option>
-        ))}
+        <option value="W" key="W">white front</option>
+        <option value="O" key="O">orange front</option>
+        <option value="G" key="G">green front</option>
+        <option value="R" key="R">red front</option>
+        <option value="B" key="B">blue front</option>
+        <option value="Y" key="Y">yellow front</option>
       </Select>
     </>
   );

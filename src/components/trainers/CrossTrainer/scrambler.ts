@@ -14,22 +14,44 @@ import {
   simplifyMoves,
   translateMoves,
 } from "src/lib/puzzles/cube3x3";
-import { CrossOptions } from "./store";
+import { Options } from "./store";
 import { genReversePruningTable } from "src/lib/search";
 import { solveCube3x3, solveEntire3x3 } from "src/lib/puzzles/cube3x3/solvers";
 import random3x3Scramble from "src/lib/puzzles/cube3x3/scramble";
 import { eightMoveCrosses, NUM_OF_MOVES_CONFIGS } from "./constants";
 import { CrossStep } from "./types";
+import { crossColorToOrientation } from "../common/constants";
+
+/*
+  Cross:
+    colorNeutrality:
+      - fixed:
+        - levelMode can be random or # moves
+        - long/short scrambles
+      - dual or full:
+        - level mode random only
+        - no short scrambles
+  XCross:
+    colorNeutrality:
+      - fixed:
+        - levelMode can be random or # moves
+        - long/short scrambles
+      - dual:
+        - level mode random only
+        - no short scrambles
+
+*/
 
 export default async function scrambler(
-  options: CrossOptions
+  options: Options
 ): Promise<Move3x3[] | null> {
   // color neutral: we only give random scrambles, never shortened
-  if (options.solutionOrientations.length !== 1) {
+  if (options.colorNeutrality !== "fixed") {
     return await random3x3Scramble();
   }
 
-  const fixedSolutionOrientation = options.solutionOrientations[0];
+  const fixedSolutionOrientation =
+    crossColorToOrientation[options.fixedCrossColor];
 
   switch (options.levelMode) {
     case "num-of-moves":
@@ -108,7 +130,7 @@ async function numOfMovesScramble(
     let success = false;
     for (let i = 0; i < iterationLimit; i++) {
       const optimalSolutionLength = (
-        await solveCube3x3(scramble, "XCross", preRotation, 1)
+        await solveCube3x3(scramble, crossStep, preRotation, 1)
       )[0].length;
       if (optimalSolutionLength === n) {
         success = true;
@@ -181,8 +203,8 @@ async function makeBetterScramble(
   preRotation: RotationMove[]
 ) {
   // This implementation is not very efficient but it's easy to implement
-  // step 1: generate a random-state cube scramble and solve the selected EOStep on it
-  // now we have an EOStep solved but everything else is scrambled
+  // step 1: generate a random-state cube scramble and solve the selected step on it
+  // now we have a step solved but everything else is scrambled
   // step 2: apply our original scramble on it
   // step 3: solve the entire cube using cubing.js
   // the inverse is a better scramble than the original
